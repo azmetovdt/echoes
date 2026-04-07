@@ -36,6 +36,8 @@ export function useAudioEngine(settings: AudioSettings) {
   const noiseFilterRef = useRef<BiquadFilterNode | null>(null);
   const noiseTremoloRef = useRef<OscillatorNode | null>(null);
   const tremoloModRef = useRef<GainNode | null>(null);
+  const noiseTremolo2Ref = useRef<OscillatorNode | null>(null);
+  const tremoloMod2Ref = useRef<GainNode | null>(null);
   const noiseReverbSendRef = useRef<GainNode | null>(null);
   const reactiveGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -73,6 +75,8 @@ export function useAudioEngine(settings: AudioSettings) {
     }
     noiseTremoloRef.current?.frequency.setTargetAtTime(settings.tremoloFreq, t, 0.05);
     tremoloModRef.current?.gain.setTargetAtTime(settings.tremoloDepth, t, 0.05);
+    noiseTremolo2Ref.current?.frequency.setTargetAtTime(settings.noiseLfo2Freq, t, 0.05);
+    tremoloMod2Ref.current?.gain.setTargetAtTime(settings.noiseLfo2Depth, t, 0.05);
     noiseReverbSendRef.current?.gain.setTargetAtTime(settings.noiseReverbSend, t, 0.05);
   }, [settings]);
 
@@ -94,29 +98,34 @@ export function useAudioEngine(settings: AudioSettings) {
     for (let i = 0; i < dataArray.length; i++) sumSquares += dataArray[i] * dataArray[i];
     const rms = Math.sqrt(sumSquares / dataArray.length);
 
-    smoothedRmsRef.current = smoothedRmsRef.current * 0.85 + rms * 0.15;
+    // Fast attack, slow release — snappy response to transients
+    const alpha = rms > smoothedRmsRef.current ? 0.4 : 0.08;
+    smoothedRmsRef.current = smoothedRmsRef.current * (1 - alpha) + rms * alpha;
     const env = smoothedRmsRef.current;
 
-    // Modulate noise filter upward from the user's base frequency
+    // Noise filter opens up when signal is loud
     if (noiseFilterRef.current) {
       const baseFreq = settingsRef.current.noiseFilterFreq;
+      const sens = settingsRef.current.noiseFilterSensitivity;
       noiseFilterRef.current.frequency.setTargetAtTime(
-        Math.min(baseFreq + env * 10000, 8000), ctx.currentTime, 0.05
+        Math.min(baseFreq + env * sens, 8000), ctx.currentTime, 0.03
       );
     }
 
-    // Modulate tremolo rate upward from the user's base rate
+    // Tremolo rate increases — noise texture speeds up with signal
     if (noiseTremoloRef.current) {
       const baseRate = settingsRef.current.tremoloFreq;
+      const sens = settingsRef.current.tremoloSensitivity;
       noiseTremoloRef.current.frequency.setTargetAtTime(
-        Math.min(baseRate + env * 40, 20), ctx.currentTime, 0.05
+        Math.min(baseRate + env * sens, 30), ctx.currentTime, 0.03
       );
     }
 
     // Reactive gain swell
     if (reactiveGainRef.current) {
-      const targetGain = 1.0 + env * 4;
-      reactiveGainRef.current.gain.setTargetAtTime(Math.min(targetGain, 4.0), ctx.currentTime, 0.05);
+      const sens = settingsRef.current.reactiveGainSensitivity;
+      const targetGain = 1.0 + env * sens;
+      reactiveGainRef.current.gain.setTargetAtTime(Math.min(targetGain, sens), ctx.currentTime, 0.03);
     }
 
     animationFrameRef.current = requestAnimationFrame(updateReactivity);
@@ -170,11 +179,11 @@ export function useAudioEngine(settings: AudioSettings) {
     lfoGain.connect(radioFilter.frequency);
     lfo.start();
 
-    // --- Analyser (reads post-filter signal for reactivity) ---
+    // --- Analyser: reads PRE-filter signal so env reflects actual sound level ---
+    // Connected to each sound's gain node inside playSound()
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
     analyserRef.current = analyser;
-    radioFilter.connect(analyser);
 
     // Route radio filter: dry output + delay send + reverb send
     const dryRadioGain = ctx.createGain();
@@ -228,7 +237,7 @@ export function useAudioEngine(settings: AudioSettings) {
     noiseFilterRef.current = noiseFilter;
     noiseCombiner.connect(noiseFilter);
 
-    // Tremolo
+    // Tremolo — two LFOs at different frequencies create beating / complex texture
     const tremoloBase = ctx.createGain();
     tremoloBase.gain.value = 0.6;
     noiseFilter.connect(tremoloBase);
@@ -237,12 +246,24 @@ export function useAudioEngine(settings: AudioSettings) {
     tremoloLfo.type = 'sine';
     tremoloLfo.frequency.value = s.tremoloFreq;
     noiseTremoloRef.current = tremoloLfo;
-
     const tremoloModulator = ctx.createGain();
     tremoloModulator.gain.value = s.tremoloDepth;
     tremoloModRef.current = tremoloModulator;
     tremoloLfo.connect(tremoloModulator);
     tremoloModulator.connect(tremoloBase.gain);
+    tremoloLfo.start();
+
+    // Second tremolo LFO — beating with first creates radio-static texture
+    const tremoloLfo2 = ctx.createOscillator();
+    tremoloLfo2.type = 'sine';
+    tremoloLfo2.frequency.value = s.noiseLfo2Freq;
+    noiseTremolo2Ref.current = tremoloLfo2;
+    const tremoloModulator2 = ctx.createGain();
+    tremoloModulator2.gain.value = s.noiseLfo2Depth;
+    tremoloMod2Ref.current = tremoloModulator2;
+    tremoloLfo2.connect(tremoloModulator2);
+    tremoloModulator2.connect(tremoloBase.gain);
+    tremoloLfo2.start();
 
     // Reactive gain (swells with signal)
     const reactiveGain = ctx.createGain();
@@ -266,12 +287,25 @@ export function useAudioEngine(settings: AudioSettings) {
 
     noise.start();
     crackle.start();
-    tremoloLfo.start();
   }, []);
 
   const playSound = useCallback(async (url: string, name: string) => {
     if (!audioCtx.current) return;
     if (audioCtx.current.state === 'suspended') await audioCtx.current.resume();
+
+    // Immediately start fading out the current sound before fetching the new one
+    const fadeTime = settingsRef.current.crossfadeDuration;
+    const targetVol = settingsRef.current.soundVolume;
+    if (currentGain.current) {
+      const now = audioCtx.current.currentTime;
+      currentGain.current.gain.cancelScheduledValues(now);
+      currentGain.current.gain.setValueAtTime(currentGain.current.gain.value || targetVol, now);
+      currentGain.current.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
+      const oldSource = currentSource.current;
+      setTimeout(() => { try { oldSource?.stop(); } catch (_) {} }, fadeTime * 1000 + 100);
+      currentSource.current = null;
+      currentGain.current = null;
+    }
 
     try {
       const response = await fetch(url);
@@ -301,8 +335,14 @@ export function useAudioEngine(settings: AudioSettings) {
       source.loop = true;
 
       const gain = audioCtx.current.createGain();
-      gain.gain.setValueAtTime(0.001, audioCtx.current.currentTime);
+      const now = audioCtx.current.currentTime;
+      gain.gain.setValueAtTime(0.001, now);
       source.connect(gain);
+
+      // Tap pre-filter signal into analyser for accurate level detection
+      if (analyserRef.current) {
+        gain.connect(analyserRef.current);
+      }
 
       if (radioFilterRef.current) {
         gain.connect(radioFilterRef.current);
@@ -310,19 +350,7 @@ export function useAudioEngine(settings: AudioSettings) {
         gain.connect(audioCtx.current.destination);
       }
 
-      const now = audioCtx.current.currentTime;
-      const fadeTime = settingsRef.current.crossfadeDuration;
-      const targetVol = settingsRef.current.soundVolume;
-
-      if (currentGain.current) {
-        currentGain.current.gain.cancelScheduledValues(now);
-        currentGain.current.gain.setValueAtTime(currentGain.current.gain.value || targetVol, now);
-        currentGain.current.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
-        const oldSource = currentSource.current;
-        setTimeout(() => { try { oldSource?.stop(); } catch (_) {} }, fadeTime * 1000 + 100);
-      }
-
-      gain.gain.exponentialRampToValueAtTime(targetVol, now + fadeTime);
+      gain.gain.exponentialRampToValueAtTime(targetVol, now + 0.1);
       source.start();
 
       currentSource.current = source;

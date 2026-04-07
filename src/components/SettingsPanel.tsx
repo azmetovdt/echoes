@@ -234,6 +234,16 @@ export default function SettingsPanel({
             onChange={v => updateSetting('tremoloDepth', v)} />
           <Slider label="Reverb Send" value={settings.noiseReverbSend} min={0} max={1} step={0.01}
             onChange={v => updateSetting('noiseReverbSend', v)} />
+          <Slider label="LFO 2 Rate" value={settings.noiseLfo2Freq} min={0.1} max={20} step={0.1} unit=" Hz"
+            onChange={v => updateSetting('noiseLfo2Freq', v)} />
+          <Slider label="LFO 2 Depth" value={settings.noiseLfo2Depth} min={0} max={1} step={0.01}
+            onChange={v => updateSetting('noiseLfo2Depth', v)} />
+          <Slider label="Reactive Gain" value={settings.reactiveGainSensitivity} min={0} max={20} step={0.5}
+            onChange={v => updateSetting('reactiveGainSensitivity', v)} />
+          <Slider label="Filter Reactivity" value={settings.noiseFilterSensitivity} min={0} max={40000} step={500} unit=" Hz"
+            onChange={v => updateSetting('noiseFilterSensitivity', v)} />
+          <Slider label="Tremolo Reactivity" value={settings.tremoloSensitivity} min={0} max={150} step={5} unit=" Hz"
+            onChange={v => updateSetting('tremoloSensitivity', v)} />
 
           {/* ── Reverb ── */}
           <SectionDivider label="Reverb" />
@@ -259,7 +269,7 @@ export default function SettingsPanel({
             onChange={v => updateSetting('radioFilterQ', v)} />
           <Slider label="LFO Rate" value={settings.lfoFreq} min={0.01} max={2} step={0.01} unit=" Hz"
             onChange={v => updateSetting('lfoFreq', v)} />
-          <Slider label="LFO Depth" value={settings.lfoDepth} min={0} max={1000} step={10} unit=" Hz"
+          <Slider label="LFO Depth" value={settings.lfoDepth} min={0} max={2000} step={10} unit=" Hz"
             onChange={v => updateSetting('lfoDepth', v)} />
           <Slider label="Dry Gain" value={settings.dryGain} min={0} max={1} step={0.01}
             onChange={v => updateSetting('dryGain', v)} />

@@ -32,6 +32,13 @@ export interface AudioSettings {
   lfoFreq: number;             // Hz, LFO rate
   lfoDepth: number;            // Hz, LFO frequency modulation depth
   dryGain: number;             // 0–1, direct (post-filter) output
+  // Second noise tremolo LFO (beating with first)
+  noiseLfo2Freq: number;
+  noiseLfo2Depth: number;
+  // Reactivity
+  reactiveGainSensitivity: number;   // gain swell multiplier (env * this)
+  noiseFilterSensitivity: number;    // Hz shift per unit env
+  tremoloSensitivity: number;        // Hz shift per unit env
 }
 
 export const DEFAULT_SETTINGS: AudioSettings = {
@@ -56,6 +63,11 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   lfoFreq: 0.05,
   lfoDepth: 400,
   dryGain: 0.8,
+  noiseLfo2Freq: 3.3,
+  noiseLfo2Depth: 0,
+  reactiveGainSensitivity: 4,
+  noiseFilterSensitivity: 10000,
+  tremoloSensitivity: 40,
 };
 
 export const BUILTIN_PRESETS: Record<string, AudioSettings> = {
@@ -103,6 +115,37 @@ export const BUILTIN_PRESETS: Record<string, AudioSettings> = {
     soundVolume: 0.9,
     lfoDepth: 100,
     noiseFilterFreq: 200,
+  },
+  'Static Veil': {
+    ...DEFAULT_SETTINGS,
+    // Sounds come through like distant radio signals
+    soundVolume: 0.45,
+    crossfadeDuration: 3,
+    radioFilterFreq: 1800,
+    radioFilterQ: 3.5,
+    lfoFreq: 0.9,
+    lfoDepth: 1400,
+    dryGain: 0.28,
+    // Dense echo cloud
+    delayTime: 0.24,
+    delayFeedback: 0.82,
+    // Long, spacious reverb
+    reverbGain: 2.4,
+    reverbDuration: 8,
+    reverbDecay: 3.5,
+    // Heavy, buzzing noise floor
+    noiseVolume: 0.14,
+    noiseFilterFreq: 1600,
+    noiseFilterQ: 0.9,
+    tremoloFreq: 8.0,       // fast AM buzz — characteristic radio static
+    tremoloDepth: 0.75,
+    noiseLfo2Freq: 12.3,    // beating with primary: 4.3 Hz modulation envelope
+    noiseLfo2Depth: 0.55,
+    noiseReverbSend: 0.75,
+    // Reactivity — now works correctly (analyser reads pre-filter signal)
+    reactiveGainSensitivity: 7,
+    noiseFilterSensitivity: 18000,
+    tremoloSensitivity: 50,
   },
 };
 
