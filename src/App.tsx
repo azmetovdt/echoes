@@ -4,38 +4,39 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { MapPin, Play, Pause, RefreshCw, Volume2, Info, ListMusic, ShieldAlert, Settings, Copyright } from 'lucide-react';
+import { MapPin, Play, Pause, Settings, ListMusic } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchLocalSounds, FreesoundResult } from './services/freesound';
 import { useAudioEngine } from './components/AudioEngine';
+import { useSettings } from './services/settings';
+import SettingsPanel from './components/SettingsPanel';
 
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Radius of the earth in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in km
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export default function App() {
+  const { settings, updateSetting, userPresets, savePreset, loadPreset, deletePreset } = useSettings();
+
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [sounds, setSounds] = useState<FreesoundResult[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [noiseVolume, setNoiseVolumeState] = useState(0.05);
   const [currentDistance, setCurrentDistance] = useState<number | null>(null);
-  const [includeExplicit, setIncludeExplicit] = useState(false);
-  const [cc0Only, setCc0Only] = useState(false);
-  const [showControls, setShowControls] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [manualLat, setManualLat] = useState('');
   const [manualLon, setManualLon] = useState('');
 
-  const { isPlaying, togglePlay, playSound, currentSoundName, setNoiseVolume } = useAudioEngine(0.05);
+  const { isPlaying, togglePlay, playSound, currentSoundName } = useAudioEngine(settings);
 
   const getGeoLocation = useCallback(() => {
     setLoading(true);
@@ -45,7 +46,7 @@ export default function App() {
         setLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
         setLoading(false);
       },
-      (err) => {
+      () => {
         setError("Could not get location. Please enable GPS.");
         setLoading(false);
       }
@@ -60,8 +61,15 @@ export default function App() {
     if (location) {
       setManualLat(location.lat.toFixed(6));
       setManualLon(location.lon.toFixed(6));
-      fetchLocalSounds(location.lat, location.lon, 10, includeExplicit, cc0Only).then((results) => {
+    }
+  }, [location]);
+
+  const { searchRadius, includeExplicit, cc0Only } = settings;
+  useEffect(() => {
+    if (location) {
+      fetchLocalSounds(location.lat, location.lon, searchRadius, includeExplicit, cc0Only).then((results) => {
         setSounds(results);
+        setCurrentIndex(0);
         if (results.length === 0) {
           setError("No sounds found in this area. Try a different location?");
         } else {
@@ -69,9 +77,10 @@ export default function App() {
         }
       });
     }
-  }, [location, includeExplicit, cc0Only]);
+  }, [location, searchRadius, includeExplicit, cc0Only]);
 
   // Cycle through sounds with dynamic overlap
+  const { crossfadeDuration } = settings;
   useEffect(() => {
     if (isPlaying && sounds.length > 0) {
       const sound = sounds[currentIndex];
@@ -88,12 +97,8 @@ export default function App() {
         setCurrentDistance(null);
       }
 
-      // Calculate when to play the next sound
-      // If duration is available, overlap by 4 seconds (4000ms)
-      // Otherwise fallback to 45 seconds
       const durationMs = (sound.duration || 45) * 1000;
-      const overlapMs = 4000;
-      // Ensure we wait at least 1 second before switching, even for very short sounds
+      const overlapMs = crossfadeDuration * 1000;
       const nextTimeMs = Math.max(1000, durationMs - overlapMs);
 
       const timeout = setTimeout(() => {
@@ -102,16 +107,9 @@ export default function App() {
 
       return () => clearTimeout(timeout);
     }
-  }, [isPlaying, sounds, currentIndex, playSound, location]);
+  }, [isPlaying, sounds, currentIndex, playSound, location, crossfadeDuration]);
 
-  const handleNoiseVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    setNoiseVolumeState(val);
-    setNoiseVolume(val);
-  };
-
-  const handleManualLocationSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const applyManualLocation = useCallback(() => {
     const lat = parseFloat(manualLat);
     const lon = parseFloat(manualLon);
     if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
@@ -120,13 +118,12 @@ export default function App() {
     } else {
       setError("Invalid coordinates. Lat must be -90 to 90, Lon must be -180 to 180.");
     }
-  };
+  }, [manualLat, manualLon]);
 
   const hasToken = !!import.meta.env.VITE_FREESOUND_TOKEN;
 
   return (
     <div className="min-h-screen bg-[#0a0502] text-[#e0d8d0] font-serif relative overflow-y-auto overflow-x-hidden">
-      {/* Atmospheric Background */}
       <div className="absolute inset-0 atmosphere pointer-events-none" />
 
       <main className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6 text-center py-12">
@@ -137,15 +134,13 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               className="max-w-md p-8 player-chrome border border-orange-500/20"
             >
-              <Info className="w-12 h-12 mx-auto mb-4 text-orange-500" />
               <h2 className="text-2xl mb-4">API Key Required</h2>
               <p className="text-sm opacity-60 leading-relaxed mb-6">
-                To hear the world, you need a Freesound API Token. 
                 Add <code className="bg-white/5 px-1 rounded text-orange-300">VITE_FREESOUND_TOKEN</code> to your environment variables.
               </p>
-              <a 
-                href="https://freesound.org/help/developers/" 
-                target="_blank" 
+              <a
+                href="https://freesound.org/help/developers/"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="inline-block px-6 py-2 rounded-full border border-orange-500/50 hover:bg-orange-500/10 transition-colors text-sm"
               >
@@ -159,12 +154,12 @@ export default function App() {
               className="flex flex-col items-center w-full max-w-2xl"
             >
               <div className="mb-12">
-                <motion.h1 
+                <motion.h1
                   className="text-6xl md:text-8xl font-light tracking-tighter mb-4"
                   animate={{ opacity: isPlaying ? [0.4, 0.7, 0.4] : 0.4 }}
                   transition={{ duration: 4, repeat: Infinity }}
                 >
-                  
+
                 </motion.h1>
                 <div className="flex items-center justify-center gap-2 text-xs uppercase tracking-widest opacity-50">
                   <MapPin className="w-3 h-3" />
@@ -183,12 +178,12 @@ export default function App() {
                         exit={{ opacity: 0, y: -10 }}
                         className="flex flex-col items-center"
                       >
-                        <div className="text-xl italic opacity-80 mb-2">
-                          {currentSoundName}
-                        </div>
+                        <div className="text-xl italic opacity-80 mb-2">{currentSoundName}</div>
                         {currentDistance !== null && (
                           <div className="text-xs uppercase tracking-widest opacity-50 text-orange-300">
-                            Recorded {currentDistance < 1 ? `${Math.round(currentDistance * 1000)}m` : `${currentDistance.toFixed(1)}km`} away
+                            Recorded {currentDistance < 1
+                              ? `${Math.round(currentDistance * 1000)}m`
+                              : `${currentDistance.toFixed(1)}km`} away
                           </div>
                         )}
                       </motion.div>
@@ -200,6 +195,7 @@ export default function App() {
                   </AnimatePresence>
                 </div>
 
+                {/* Play button */}
                 <div className="flex items-center justify-center mb-6">
                   <button
                     onClick={togglePlay}
@@ -210,120 +206,39 @@ export default function App() {
                   </button>
                 </div>
 
-                <button
-                  onClick={() => setShowControls(!showControls)}
-                  className="mx-auto flex items-center gap-2 text-[10px] uppercase tracking-widest opacity-50 hover:opacity-100 transition-opacity"
-                >
-                  <Settings className="w-3 h-3" />
-                  {showControls ? 'Hide Controls' : 'Show Controls'}
-                </button>
-
-                <AnimatePresence>
-                  {showControls && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="pt-8 flex flex-col gap-8 border-t border-white/10 mt-6">
-                        {/* Manual Location Input */}
-                        <div className="flex flex-col items-center gap-3">
-                          <span className="text-[10px] uppercase tracking-widest opacity-60">Location</span>
-                          <form onSubmit={handleManualLocationSubmit} className="flex flex-col gap-3 items-center">
-                            <div className="flex gap-2">
-                              <input 
-                                type="text" 
-                                value={manualLat} 
-                                onChange={e => setManualLat(e.target.value)} 
-                                placeholder="Latitude" 
-                                className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm w-28 text-center focus:outline-none focus:border-orange-500/50 transition-colors"
-                              />
-                              <input 
-                                type="text" 
-                                value={manualLon} 
-                                onChange={e => setManualLon(e.target.value)} 
-                                placeholder="Longitude" 
-                                className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm w-28 text-center focus:outline-none focus:border-orange-500/50 transition-colors"
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <button type="submit" className="text-[10px] uppercase tracking-widest px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors">
-                                Set
-                              </button>
-                              <button type="button" onClick={getGeoLocation} className="text-[10px] uppercase tracking-widest px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors flex items-center gap-2">
-                                <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> GPS
-                              </button>
-                            </div>
-                          </form>
-                        </div>
-
-                        {/* Noise Volume Control */}
-                        <div className="flex flex-col items-center gap-3">
-                          <span className="text-[10px] uppercase tracking-widest opacity-60">Noise Floor</span>
-                          <div className="flex items-center gap-4 w-full max-w-xs mx-auto opacity-80 hover:opacity-100 transition-opacity">
-                            <Volume2 className="w-4 h-4" />
-                            <input 
-                              type="range" 
-                              min="0" 
-                              max="0.2" 
-                              step="0.001" 
-                              value={noiseVolume} 
-                              onChange={handleNoiseVolumeChange}
-                              className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                            />
-                            <span className="text-xs w-8 text-right">{Math.round((noiseVolume / 0.2) * 100)}%</span>
-                          </div>
-                        </div>
-
-                        {/* Explicit Sounds Toggle */}
-                        <div className="flex items-center justify-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
-                          <ShieldAlert className="w-4 h-4" />
-                          <span className="text-[10px] uppercase tracking-widest">Explicit Sounds</span>
-                          <button
-                            onClick={() => setIncludeExplicit(!includeExplicit)}
-                            className={`w-10 h-5 rounded-full p-1 transition-colors flex items-center ${includeExplicit ? 'bg-orange-500' : 'bg-white/20'}`}
-                          >
-                            <div className={`w-3 h-3 rounded-full bg-white transition-transform ${includeExplicit ? 'translate-x-5' : 'translate-x-0'}`} />
-                          </button>
-                        </div>
-
-                        {/* CC0 Only Toggle */}
-                        <div className="flex items-center justify-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
-                          <Copyright className="w-4 h-4" />
-                          <span className="text-[10px] uppercase tracking-widest">No Attribution (CC0)</span>
-                          <button
-                            onClick={() => setCc0Only(!cc0Only)}
-                            className={`w-10 h-5 rounded-full p-1 transition-colors flex items-center ${cc0Only ? 'bg-orange-500' : 'bg-white/20'}`}
-                          >
-                            <div className={`w-3 h-3 rounded-full bg-white transition-transform ${cc0Only ? 'translate-x-5' : 'translate-x-0'}`} />
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* Controls row */}
+                <div className="flex items-center justify-center gap-6">
+                  <button
+                    onClick={() => setShowQueue(!showQueue)}
+                    className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
+                  >
+                    <ListMusic className="w-3 h-3" />
+                    Queue
+                  </button>
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
+                  >
+                    <Settings className="w-3 h-3" />
+                    Settings
+                  </button>
+                </div>
               </div>
 
               {error && (
-                <div className="text-orange-500/80 text-sm italic mb-4">
-                  {error}
-                </div>
+                <div className="text-orange-500/80 text-sm italic mb-4">{error}</div>
               )}
 
               {/* Recording Queue */}
               <AnimatePresence>
-                {showControls && sounds.length > 0 && (
-                  <motion.div 
+                {showQueue && sounds.length > 0 && (
+                  <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="mt-8 w-full max-w-md text-left overflow-hidden"
+                    className="mt-4 w-full max-w-md text-left overflow-hidden"
                   >
-                    <h3 className="text-[10px] uppercase tracking-widest opacity-40 mb-4 px-4 flex items-center gap-2">
-                      <ListMusic className="w-3 h-3" /> Recording Queue
-                    </h3>
-                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto px-4 pb-4 custom-scrollbar">
+                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto px-1 pb-4 custom-scrollbar">
                       {sounds.map((sound, index) => {
                         const isCurrent = index === currentIndex;
                         let distanceStr = '';
@@ -334,14 +249,13 @@ export default function App() {
                             distanceStr = dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist.toFixed(1)}km`;
                           }
                         }
-
                         return (
-                          <div 
+                          <div
                             key={sound.id}
                             onClick={() => setCurrentIndex(index)}
                             className={`p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                              isCurrent 
-                                ? 'bg-orange-500/10 border-orange-500/30 opacity-100' 
+                              isCurrent
+                                ? 'bg-orange-500/10 border-orange-500/30 opacity-100'
                                 : 'bg-white/5 border-transparent opacity-40 hover:opacity-70 hover:bg-white/10'
                             }`}
                           >
@@ -368,9 +282,31 @@ export default function App() {
         </AnimatePresence>
       </main>
 
+      {/* Settings Panel */}
+      <AnimatePresence>
+        {showSettings && (
+          <SettingsPanel
+            settings={settings}
+            updateSetting={updateSetting}
+            userPresets={userPresets}
+            onSavePreset={(name) => savePreset(name, settings)}
+            onLoadPreset={loadPreset}
+            onDeletePreset={deletePreset}
+            onClose={() => setShowSettings(false)}
+            manualLat={manualLat}
+            manualLon={manualLon}
+            setManualLat={setManualLat}
+            setManualLon={setManualLon}
+            onSetManualLocation={applyManualLocation}
+            onGetGPS={getGeoLocation}
+            gpsLoading={loading}
+          />
+        )}
+      </AnimatePresence>
+
       <style>{`
         .atmosphere {
-          background: 
+          background:
             radial-gradient(circle at 50% 30%, #3a1510 0%, transparent 60%),
             radial-gradient(circle at 10% 80%, #ff4e00 0%, transparent 50%);
           filter: blur(60px);
@@ -382,20 +318,38 @@ export default function App() {
           border-radius: 40px;
           border: 1px solid rgba(255, 200, 150, 0.1);
         }
+        input[type=range] {
+          -webkit-appearance: none;
+          appearance: none;
+        }
         input[type=range]::-webkit-slider-thumb {
           -webkit-appearance: none;
           height: 12px;
           width: 12px;
           border-radius: 50%;
-          background: #ff4e00;
+          background: #f97316;
           cursor: pointer;
         }
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
+        input[type=range]::-moz-range-thumb {
+          height: 12px;
+          width: 12px;
+          border-radius: 50%;
+          background: #f97316;
+          border: none;
+          cursor: pointer;
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
+        input[type=range]::-moz-range-track {
+          height: 4px;
+          border-radius: 2px;
+          background: rgba(255,255,255,0.12);
         }
+        input[type=range]::-moz-range-progress {
+          height: 4px;
+          border-radius: 2px;
+          background: #f97316;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: rgba(255, 255, 255, 0.1);
           border-radius: 4px;
