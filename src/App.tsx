@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { MapPin, Play, Pause, Settings, ListMusic } from 'lucide-react';
+import { MapPin, Play, Pause, Settings, ListMusic, Circle, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchLocalSounds, FreesoundResult } from './services/freesound';
 import { useAudioEngine } from './components/AudioEngine';
@@ -36,7 +36,7 @@ export default function App() {
   const [manualLat, setManualLat] = useState('');
   const [manualLon, setManualLon] = useState('');
 
-  const { isPlaying, togglePlay, playSound, currentSoundName } = useAudioEngine(settings);
+  const { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording } = useAudioEngine(settings);
 
   const getGeoLocation = useCallback(() => {
     setLoading(true);
@@ -214,6 +214,14 @@ export default function App() {
                   >
                     <ListMusic className="w-3 h-3" />
                     Queue
+                  </button>
+                  <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={!isPlaying}
+                    className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest transition-opacity disabled:opacity-20 ${isRecording ? 'opacity-100 text-red-400' : 'opacity-40 hover:opacity-100'}`}
+                  >
+                    {isRecording ? <Square className="w-3 h-3 fill-current" /> : <Circle className="w-3 h-3 fill-current" />}
+                    {isRecording ? 'Stop' : 'Rec'}
                   </button>
                   <button
                     onClick={() => setShowSettings(true)}

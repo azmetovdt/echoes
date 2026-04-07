@@ -6,6 +6,11 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { AudioSettings } from '../services/settings';
 
+function pickMimeType() {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+  return candidates.find(t => MediaRecorder.isTypeSupported(t)) ?? '';
+}
+
 function createSpacetimeImpulse(audioCtx: AudioContext, duration: number, decay: number) {
   const length = audioCtx.sampleRate * duration;
   const impulse = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
@@ -41,6 +46,11 @@ export function useAudioEngine(settings: AudioSettings) {
   const noiseReverbSendRef = useRef<GainNode | null>(null);
   const reactiveGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const masterOutRef = useRef<GainNode | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const isRecordingRef = useRef(false);
+  const segmentCountRef = useRef(0);
+  const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const animationFrameRef = useRef<number | null>(null);
   const isPlayingRef = useRef<boolean>(false);
@@ -52,6 +62,7 @@ export function useAudioEngine(settings: AudioSettings) {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSoundName, setCurrentSoundName] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   // Sync all AudioParams whenever settings change
   useEffect(() => {
@@ -138,6 +149,11 @@ export function useAudioEngine(settings: AudioSettings) {
     const s = settingsRef.current;
 
     // --- 1. Reverb (Convolver) ---
+    const masterOut = ctx.createGain();
+    masterOut.gain.value = 1.0;
+    masterOutRef.current = masterOut;
+    masterOut.connect(ctx.destination);
+
     const convolver = ctx.createConvolver();
     convolver.buffer = createSpacetimeImpulse(ctx, s.reverbDuration, s.reverbDecay);
     convolverRef.current = convolver;
@@ -146,7 +162,7 @@ export function useAudioEngine(settings: AudioSettings) {
     convolverGain.gain.value = s.reverbGain;
     convolverGainRef.current = convolverGain;
     convolver.connect(convolverGain);
-    convolverGain.connect(ctx.destination);
+    convolverGain.connect(masterOut);
 
     // --- 2. Echo (Delay) ---
     const delay = ctx.createDelay(5.0);
@@ -190,7 +206,7 @@ export function useAudioEngine(settings: AudioSettings) {
     dryRadioGain.gain.value = s.dryGain;
     dryRadioGainRef.current = dryRadioGain;
     radioFilter.connect(dryRadioGain);
-    dryRadioGain.connect(ctx.destination);
+    dryRadioGain.connect(masterOut);
     radioFilter.connect(delay);
     radioFilter.connect(convolver);
 
@@ -276,7 +292,7 @@ export function useAudioEngine(settings: AudioSettings) {
     noiseGain.gain.value = s.noiseVolume;
     noiseGainRef.current = noiseGain;
     reactiveGain.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(masterOut);
 
     // Send noise into reverb
     const noiseReverbSend = ctx.createGain();
@@ -361,6 +377,76 @@ export function useAudioEngine(settings: AudioSettings) {
     }
   }, []);
 
+  const SEGMENT_DURATION = 60_000; // ms
+  const CROSSFADE = 10;            // seconds
+
+  const startSegment = useCallback(() => {
+    const ctx = audioCtx.current;
+    const masterOut = masterOutRef.current;
+    if (!ctx || !masterOut || !isRecordingRef.current) return;
+
+    const index = ++segmentCountRef.current;
+    const chunks: Blob[] = [];
+
+    const recordGain = ctx.createGain();
+    recordGain.gain.value = 1.0;
+    masterOut.connect(recordGain);
+
+    const dest = ctx.createMediaStreamDestination();
+    recordGain.connect(dest);
+
+    const mimeType = pickMimeType();
+    const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      recordGain.disconnect(dest);
+      masterOut.disconnect(recordGain);
+      const blob = new Blob(chunks, { type: recorder.mimeType });
+      const url = URL.createObjectURL(blob);
+      const ext = recorder.mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `echoes-part${index}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    recorder.start();
+
+    // After SEGMENT_DURATION, fade out this segment and start the next one
+    segmentTimerRef.current = setTimeout(() => {
+      if (!isRecordingRef.current) return;
+
+      // Fade out this segment's gain
+      const now = ctx.currentTime;
+      recordGain.gain.setValueAtTime(1.0, now);
+      recordGain.gain.linearRampToValueAtTime(0, now + CROSSFADE);
+
+      // Start next segment immediately (it starts at full gain)
+      startSegment();
+
+      // Stop this recorder after the fade completes
+      setTimeout(() => recorder.stop(), CROSSFADE * 1000);
+    }, SEGMENT_DURATION);
+  }, [CROSSFADE]);
+
+  const startRecording = useCallback(() => {
+    if (!audioCtx.current || !masterOutRef.current) return;
+    isRecordingRef.current = true;
+    segmentCountRef.current = 0;
+    setIsRecording(true);
+    startSegment();
+  }, [startSegment]);
+
+  const stopRecording = useCallback(() => {
+    isRecordingRef.current = false;
+    if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current);
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  }, []);
+
   const togglePlay = useCallback(async () => {
     if (!isPlaying) {
       initAudio();
@@ -384,5 +470,5 @@ export function useAudioEngine(settings: AudioSettings) {
     };
   }, []);
 
-  return { isPlaying, togglePlay, playSound, currentSoundName };
+  return { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording };
 }
