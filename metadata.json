@@ -1,0 +1,7 @@
+{
+  "name": "Echoes",
+  "description": "A generative audio tool that weaves local field recordings from Freesound.org into an atmospheric soundscape based on your GPS location.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
