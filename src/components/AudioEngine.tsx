@@ -48,9 +48,6 @@ export function useAudioEngine(settings: AudioSettings) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const masterOutRef = useRef<GainNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const isRecordingRef = useRef(false);
-  const segmentCountRef = useRef(0);
-  const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const animationFrameRef = useRef<number | null>(null);
   const isPlayingRef = useRef<boolean>(false);
@@ -305,13 +302,13 @@ export function useAudioEngine(settings: AudioSettings) {
     crackle.start();
   }, []);
 
-  const playSound = useCallback(async (url: string, name: string) => {
+  const playSound = useCallback(async (url: string, name: string, volumeMultiplier = 1.0) => {
     if (!audioCtx.current) return;
     if (audioCtx.current.state === 'suspended') await audioCtx.current.resume();
 
     // Immediately start fading out the current sound before fetching the new one
     const fadeTime = settingsRef.current.crossfadeDuration;
-    const targetVol = settingsRef.current.soundVolume;
+    const targetVol = settingsRef.current.soundVolume * volumeMultiplier;
     if (currentGain.current) {
       const now = audioCtx.current.currentTime;
       currentGain.current.gain.cancelScheduledValues(now);
@@ -377,23 +374,14 @@ export function useAudioEngine(settings: AudioSettings) {
     }
   }, []);
 
-  const SEGMENT_DURATION = 60_000; // ms
-  const CROSSFADE = 10;            // seconds
-
-  const startSegment = useCallback(() => {
+  const startRecording = useCallback(() => {
     const ctx = audioCtx.current;
     const masterOut = masterOutRef.current;
-    if (!ctx || !masterOut || !isRecordingRef.current) return;
+    if (!ctx || !masterOut) return;
 
-    const index = ++segmentCountRef.current;
     const chunks: Blob[] = [];
-
-    const recordGain = ctx.createGain();
-    recordGain.gain.value = 1.0;
-    masterOut.connect(recordGain);
-
     const dest = ctx.createMediaStreamDestination();
-    recordGain.connect(dest);
+    masterOut.connect(dest);
 
     const mimeType = pickMimeType();
     const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
@@ -401,50 +389,33 @@ export function useAudioEngine(settings: AudioSettings) {
 
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = () => {
-      recordGain.disconnect(dest);
-      masterOut.disconnect(recordGain);
+      masterOut.disconnect(dest);
       const blob = new Blob(chunks, { type: recorder.mimeType });
       const url = URL.createObjectURL(blob);
       const ext = recorder.mimeType.includes('ogg') ? 'ogg' : 'webm';
       const a = document.createElement('a');
       a.href = url;
-      a.download = `echoes-part${index}.${ext}`;
+      a.download = `echoes-${Date.now()}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     };
 
     recorder.start();
-
-    // After SEGMENT_DURATION, fade out this segment and start the next one
-    segmentTimerRef.current = setTimeout(() => {
-      if (!isRecordingRef.current) return;
-
-      // Fade out this segment's gain
-      const now = ctx.currentTime;
-      recordGain.gain.setValueAtTime(1.0, now);
-      recordGain.gain.linearRampToValueAtTime(0, now + CROSSFADE);
-
-      // Start next segment immediately (it starts at full gain)
-      startSegment();
-
-      // Stop this recorder after the fade completes
-      setTimeout(() => recorder.stop(), CROSSFADE * 1000);
-    }, SEGMENT_DURATION);
-  }, [CROSSFADE]);
-
-  const startRecording = useCallback(() => {
-    if (!audioCtx.current || !masterOutRef.current) return;
-    isRecordingRef.current = true;
-    segmentCountRef.current = 0;
     setIsRecording(true);
-    startSegment();
-  }, [startSegment]);
+  }, []);
 
   const stopRecording = useCallback(() => {
-    isRecordingRef.current = false;
-    if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current);
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
+  }, []);
+
+  const dimCurrentSound = useCallback((fraction: number) => {
+    const gain = currentGain.current;
+    const ctx = audioCtx.current;
+    if (!gain || !ctx) return;
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(gain.gain.value * fraction, now + 3);
   }, []);
 
   const togglePlay = useCallback(async () => {
@@ -470,5 +441,5 @@ export function useAudioEngine(settings: AudioSettings) {
     };
   }, []);
 
-  return { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording };
+  return { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound };
 }

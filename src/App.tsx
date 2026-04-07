@@ -35,8 +35,10 @@ export default function App() {
   const [showQueue, setShowQueue] = useState(false);
   const [manualLat, setManualLat] = useState('');
   const [manualLon, setManualLon] = useState('');
+  const [echoMultiplier, setEchoMultiplier] = useState(1.0);
+  const [echoCount, setEchoCount] = useState(0);
 
-  const { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording } = useAudioEngine(settings);
+  const { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound } = useAudioEngine(settings);
 
   const getGeoLocation = useCallback(() => {
     setLoading(true);
@@ -84,7 +86,7 @@ export default function App() {
   useEffect(() => {
     if (isPlaying && sounds.length > 0) {
       const sound = sounds[currentIndex];
-      playSound(sound.previews['preview-hq-mp3'], sound.name);
+      playSound(sound.previews['preview-hq-mp3'], sound.name, echoMultiplier);
 
       if (location && sound.geotag) {
         const [sLat, sLon] = sound.geotag.split(' ').map(Number);
@@ -99,15 +101,44 @@ export default function App() {
 
       const durationMs = (sound.duration || 45) * 1000;
       const overlapMs = crossfadeDuration * 1000;
-      const nextTimeMs = Math.max(1000, durationMs - overlapMs);
+      const MAX_PLAY_MS = 60_000;
+      const SHORT_MS = 15_000;
+      const isLong = durationMs > MAX_PLAY_MS;
+      const isShort = durationMs < SHORT_MS;
+
+      const effectiveDurationMs = isLong ? MAX_PLAY_MS : durationMs;
+      const nextTimeMs = Math.max(1000, effectiveDurationMs - overlapMs);
+
+      // For long sounds: dim current sound when 1 minute is up and next begins
+      let dimTimeout: ReturnType<typeof setTimeout> | null = null;
+      if (isLong) {
+        dimTimeout = setTimeout(() => dimCurrentSound(0.25), nextTimeMs);
+      }
 
       const timeout = setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % sounds.length);
+        const ECHO_DECAY = 0.35;
+        const MAX_ECHOES = 3;
+        const ECHO_CHANCE = 0.6;
+
+        if (isShort && echoCount === 0 && Math.random() < ECHO_CHANCE) {
+          setEchoMultiplier(ECHO_DECAY);
+          setEchoCount(1);
+        } else if (echoCount > 0 && echoCount < MAX_ECHOES && echoMultiplier * ECHO_DECAY > 0.04) {
+          setEchoMultiplier(echoMultiplier * ECHO_DECAY);
+          setEchoCount(echoCount + 1);
+        } else {
+          setEchoMultiplier(1.0);
+          setEchoCount(0);
+          setCurrentIndex((prev: number) => (prev + 1) % sounds.length);
+        }
       }, nextTimeMs);
 
-      return () => clearTimeout(timeout);
+      return () => {
+        clearTimeout(timeout);
+        if (dimTimeout) clearTimeout(dimTimeout);
+      };
     }
-  }, [isPlaying, sounds, currentIndex, playSound, location, crossfadeDuration]);
+  }, [isPlaying, sounds, currentIndex, echoMultiplier, echoCount, playSound, dimCurrentSound, location, crossfadeDuration]);
 
   const applyManualLocation = useCallback(() => {
     const lat = parseFloat(manualLat);
