@@ -65,27 +65,38 @@ export function useAudioEngine(settings: AudioSettings) {
   useEffect(() => {
     const ctx = audioCtx.current;
     if (!ctx) return;
-    const t = ctx.currentTime;
-    noiseGainRef.current?.gain.setTargetAtTime(settings.noiseVolume, t, 0.05);
-    convolverGainRef.current?.gain.setTargetAtTime(settings.reverbGain, t, 0.1);
-    delayRef.current?.delayTime.setTargetAtTime(settings.delayTime, t, 0.1);
-    delayFeedbackRef.current?.gain.setTargetAtTime(settings.delayFeedback, t, 0.1);
+    const t = ctx.currentTime + 0.02; // Small offset to avoid scheduling in the past
+
+    const setParam = (param: AudioParam | undefined, val: number, tc: number) => {
+      if (!param) return;
+      param.cancelScheduledValues(t);
+      param.setTargetAtTime(val, t, tc);
+    };
+
+    setParam(noiseGainRef.current?.gain, settings.noiseVolume, 0.05);
+    setParam(convolverGainRef.current?.gain, settings.reverbGain, 0.1);
+    setParam(delayRef.current?.delayTime, settings.delayTime, 0.1);
+    setParam(delayFeedbackRef.current?.gain, settings.delayFeedback, 0.1);
+    
     if (radioFilterRef.current) {
-      radioFilterRef.current.frequency.setTargetAtTime(settings.radioFilterFreq, t, 0.05);
-      radioFilterRef.current.Q.setTargetAtTime(settings.radioFilterQ, t, 0.05);
+      setParam(radioFilterRef.current.frequency, settings.radioFilterFreq, 0.05);
+      setParam(radioFilterRef.current.Q, settings.radioFilterQ, 0.05);
     }
-    lfoRef.current?.frequency.setTargetAtTime(settings.lfoFreq, t, 0.1);
-    lfoGainRef.current?.gain.setTargetAtTime(settings.lfoDepth, t, 0.1);
-    dryRadioGainRef.current?.gain.setTargetAtTime(settings.dryGain, t, 0.05);
+    
+    setParam(lfoRef.current?.frequency, settings.lfoFreq, 0.1);
+    setParam(lfoGainRef.current?.gain, settings.lfoDepth, 0.1);
+    setParam(dryRadioGainRef.current?.gain, settings.dryGain, 0.05);
+    
     if (noiseFilterRef.current) {
-      noiseFilterRef.current.frequency.setTargetAtTime(settings.noiseFilterFreq, t, 0.05);
-      noiseFilterRef.current.Q.setTargetAtTime(settings.noiseFilterQ, t, 0.05);
+      setParam(noiseFilterRef.current.frequency, settings.noiseFilterFreq, 0.05);
+      setParam(noiseFilterRef.current.Q, settings.noiseFilterQ, 0.05);
     }
-    noiseTremoloRef.current?.frequency.setTargetAtTime(settings.tremoloFreq, t, 0.05);
-    tremoloModRef.current?.gain.setTargetAtTime(settings.tremoloDepth, t, 0.05);
-    noiseTremolo2Ref.current?.frequency.setTargetAtTime(settings.noiseLfo2Freq, t, 0.05);
-    tremoloMod2Ref.current?.gain.setTargetAtTime(settings.noiseLfo2Depth, t, 0.05);
-    noiseReverbSendRef.current?.gain.setTargetAtTime(settings.noiseReverbSend, t, 0.05);
+    
+    setParam(noiseTremoloRef.current?.frequency, settings.tremoloFreq, 0.05);
+    setParam(tremoloModRef.current?.gain, settings.tremoloDepth, 0.05);
+    setParam(noiseTremolo2Ref.current?.frequency, settings.noiseLfo2Freq, 0.05);
+    setParam(tremoloMod2Ref.current?.gain, settings.noiseLfo2Depth, 0.05);
+    setParam(noiseReverbSendRef.current?.gain, settings.noiseReverbSend, 0.05);
   }, [settings]);
 
   // Regenerate reverb impulse when duration or decay changes
@@ -111,29 +122,33 @@ export function useAudioEngine(settings: AudioSettings) {
     smoothedRmsRef.current = smoothedRmsRef.current * (1 - alpha) + rms * alpha;
     const env = smoothedRmsRef.current;
 
+    const t = ctx.currentTime + 0.02;
+
     // Noise filter opens up when signal is loud
     if (noiseFilterRef.current) {
       const baseFreq = settingsRef.current.noiseFilterFreq;
       const sens = settingsRef.current.noiseFilterSensitivity;
-      noiseFilterRef.current.frequency.setTargetAtTime(
-        Math.min(baseFreq + env * sens, 8000), ctx.currentTime, 0.03
-      );
+      const param = noiseFilterRef.current.frequency;
+      param.cancelScheduledValues(t);
+      param.setTargetAtTime(Math.min(baseFreq + env * sens, 8000), t, 0.03);
     }
 
     // Tremolo rate increases — noise texture speeds up with signal
     if (noiseTremoloRef.current) {
       const baseRate = settingsRef.current.tremoloFreq;
       const sens = settingsRef.current.tremoloSensitivity;
-      noiseTremoloRef.current.frequency.setTargetAtTime(
-        Math.min(baseRate + env * sens, 30), ctx.currentTime, 0.03
-      );
+      const param = noiseTremoloRef.current.frequency;
+      param.cancelScheduledValues(t);
+      param.setTargetAtTime(Math.min(baseRate + env * sens, 30), t, 0.03);
     }
 
     // Reactive gain swell
     if (reactiveGainRef.current) {
       const sens = settingsRef.current.reactiveGainSensitivity;
       const targetGain = 1.0 + env * sens;
-      reactiveGainRef.current.gain.setTargetAtTime(Math.min(targetGain, sens), ctx.currentTime, 0.03);
+      const param = reactiveGainRef.current.gain;
+      param.cancelScheduledValues(t);
+      param.setTargetAtTime(Math.min(targetGain, sens), t, 0.03);
     }
 
     animationFrameRef.current = requestAnimationFrame(updateReactivity);
@@ -441,5 +456,7 @@ export function useAudioEngine(settings: AudioSettings) {
     };
   }, []);
 
-  return { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound };
+  const getSmoothedRms = useCallback(() => smoothedRmsRef.current, []);
+
+  return { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms };
 }

@@ -39,6 +39,8 @@ export interface AudioSettings {
   reactiveGainSensitivity: number;   // gain swell multiplier (env * this)
   noiseFilterSensitivity: number;    // Hz shift per unit env
   tremoloSensitivity: number;        // Hz shift per unit env
+  // Morphing
+  morphingEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: AudioSettings = {
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   reactiveGainSensitivity: 20,
   noiseFilterSensitivity: 8000,
   tremoloSensitivity: 150,
+  morphingEnabled: true,
 };
 
 export const BUILTIN_PRESETS: Record<string, AudioSettings> = {
@@ -180,6 +183,14 @@ export function useSettings() {
     });
   }, []);
 
+  const batchUpdate = useCallback((updates: Partial<AudioSettings>) => {
+    setSettings(prev => {
+      const next = { ...prev, ...updates };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const savePreset = useCallback((name: string, current: AudioSettings) => {
     setUserPresets(prev => {
       const next = { ...prev, [name]: current };
@@ -202,5 +213,5 @@ export function useSettings() {
     });
   }, []);
 
-  return { settings, updateSetting, userPresets, savePreset, loadPreset, deletePreset };
+  return { settings, updateSetting, batchUpdate, userPresets, savePreset, loadPreset, deletePreset };
 }

@@ -218,6 +218,8 @@ export default function SettingsPanel({
               onChange={v => updateSetting('includeExplicit', v)} />
             <Toggle label="CC0 Only" value={settings.cc0Only}
               onChange={v => updateSetting('cc0Only', v)} />
+            <Toggle label="Morphing" value={settings.morphingEnabled}
+              onChange={v => updateSetting('morphingEnabled', v)} />
           </div>
 
           {/* ── Noise Floor ── */}
