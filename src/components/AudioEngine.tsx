@@ -147,8 +147,10 @@ export function useAudioEngine(settings: AudioSettings) {
     const s = settingsRef.current;
 
     const masterOut = ctx.createGain();
+    masterOut.gain.value = 0.0001; 
     masterOutRef.current = masterOut;
     masterOut.connect(ctx.destination);
+    masterOut.gain.exponentialRampToValueAtTime(1.0, ctx.currentTime + 4.0); 
 
     const convolver = ctx.createConvolver();
     convolverRef.current = convolver;
@@ -187,6 +189,7 @@ export function useAudioEngine(settings: AudioSettings) {
     radioFilterRef.current = radioFilter;
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
+    lfoGain.gain.value = s.lfoDepth;
     lfoGainRef.current = lfoGain;
     lfo.connect(lfoGain);
     lfoGain.connect(radioFilter.frequency);
@@ -198,22 +201,27 @@ export function useAudioEngine(settings: AudioSettings) {
     analyserRef.current = analyser;
 
     const dryRadioGain = ctx.createGain();
+    dryRadioGain.gain.value = s.dryGain;
     dryRadioGainRef.current = dryRadioGain;
     radioFilter.connect(dryRadioGain);
     dryRadioGain.connect(masterOut);
     radioFilter.connect(delay);
     radioFilter.connect(convolver);
 
-    // --- Noise Setup ---
+    // --- Stereo Pink Noise Setup ---
     const bufferSize = 2 * ctx.sampleRate;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
-    for (let i=0; i<bufferSize; i++) {
-      const white = Math.random()*2-1;
-      b0=0.99886*b0+white*0.0555179; b1=0.99332*b1+white*0.0750759; b2=0.969*b2+white*0.153852;
-      b3=0.8665*b3+white*0.3104856; b4=0.55*b4+white*0.5329522; b5=-0.7616*b5-white*0.016898;
-      output[i] = (b0+b1+b2+b3+b4+b5+b6+white*0.5362)*0.11; b6=white*0.115926;
+    const noiseBuffer = ctx.createBuffer(2, bufferSize, ctx.sampleRate);
+    
+    for (let channel = 0; channel < 2; channel++) {
+      const output = noiseBuffer.getChannelData(channel);
+      let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+      for (let i=0; i<bufferSize; i++) {
+        const white = Math.random()*2-1;
+        // Voss-McCartney algorithm for pink noise
+        b0=0.99886*b0+white*0.0555179; b1=0.99332*b1+white*0.0750759; b2=0.969*b2+white*0.153852;
+        b3=0.8665*b3+white*0.3104856; b4=0.55*b4+white*0.5329522; b5=-0.7616*b5-white*0.016898;
+        output[i] = (b0+b1+b2+b3+b4+b5+b6+white*0.5362)*0.11; b6=white*0.115926;
+      }
     }
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer; noise.loop = true;
@@ -223,6 +231,7 @@ export function useAudioEngine(settings: AudioSettings) {
     noise.connect(noiseFilter);
 
     const tremoloBase = ctx.createGain();
+    tremoloBase.gain.value = 0.6;
     noiseFilter.connect(tremoloBase);
     const tLfo1 = ctx.createOscillator(); noiseTremoloRef.current = tLfo1;
     const tMod1 = ctx.createGain(); tremoloModRef.current = tMod1;
@@ -234,7 +243,15 @@ export function useAudioEngine(settings: AudioSettings) {
 
     const reactiveGain = ctx.createGain(); reactiveGainRef.current = reactiveGain;
     tremoloBase.connect(reactiveGain);
+
+    // --- Background Noise Layer (no tremolo) ---
+    const bgNoiseGain = ctx.createGain();
+    bgNoiseGain.gain.value = 0.25; // Quiet, steady floor
+    noiseFilter.connect(bgNoiseGain);
+    bgNoiseGain.connect(reactiveGain);
+
     const noiseGain = ctx.createGain(); noiseGainRef.current = noiseGain;
+    noiseGain.gain.value = s.noiseVolume;
     reactiveGain.connect(noiseGain); noiseGain.connect(masterOut);
 
     const noiseReverbSend = ctx.createGain(); noiseReverbSendRef.current = noiseReverbSend;
