@@ -38,7 +38,7 @@ export default function App() {
   const [echoMultiplier, setEchoMultiplier] = useState(1.0);
   const [echoCount, setEchoCount] = useState(0);
 
-  const { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms } = useAudioEngine(settings);
+  const { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms, soundStatus } = useAudioEngine(settings);
 
   useMorphing(settings, batchUpdate, settings.morphingEnabled && isPlaying);
 

@@ -58,6 +58,7 @@ export function useAudioEngine(settings: AudioSettings) {
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [soundStatus, setSoundStatus] = useState<'idle' | 'loading' | 'playing'>('idle');
   const [currentSoundName, setCurrentSoundName] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
 
@@ -321,6 +322,8 @@ export function useAudioEngine(settings: AudioSettings) {
     if (!audioCtx.current) return;
     if (audioCtx.current.state === 'suspended') await audioCtx.current.resume();
 
+    setSoundStatus('loading');
+
     // Immediately start fading out the current sound before fetching the new one
     const fadeTime = settingsRef.current.crossfadeDuration;
     const targetVol = settingsRef.current.soundVolume * volumeMultiplier;
@@ -384,8 +387,10 @@ export function useAudioEngine(settings: AudioSettings) {
       currentSource.current = source;
       currentGain.current = gain;
       setCurrentSoundName(name);
+      setSoundStatus('playing');
     } catch (e) {
       console.error('Audio playback error:', e);
+      setSoundStatus('idle');
     }
   }, []);
 
@@ -446,17 +451,18 @@ export function useAudioEngine(settings: AudioSettings) {
       audioCtx.current?.suspend();
       setIsPlaying(false);
       isPlayingRef.current = false;
+      setSoundStatus('idle');
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     }
-  }, [isPlaying, initAudio, updateReactivity]);
+    }, [isPlaying, initAudio, updateReactivity]);
 
-  useEffect(() => {
+    useEffect(() => {
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, []);
+    }, []);
 
   const getSmoothedRms = useCallback(() => smoothedRmsRef.current, []);
 
-  return { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms };
+  return { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms, soundStatus };
 }

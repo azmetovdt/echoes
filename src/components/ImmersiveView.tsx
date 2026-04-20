@@ -20,13 +20,15 @@ interface Props {
   location: { lat: number; lon: number } | null;
   onSwitchToControl: () => void;
   getSmoothedRms: () => number;
+  soundStatus?: 'idle' | 'loading' | 'playing';
 }
 
 export default function ImmersiveView({
-  settings, batchUpdate: _batchUpdate, isPlaying, onBegin, loading, error, location, onSwitchToControl, getSmoothedRms,
+  settings, batchUpdate: _batchUpdate, isPlaying, onBegin, loading, error, location, onSwitchToControl, getSmoothedRms, soundStatus,
 }: Props) {
   const [phase, setPhase] = useState<'warning' | 'active'>('warning');
   const [geoState, setGeoState] = useState<PermissionState | 'unknown'>('unknown');
+  const [showInfo, setShowInfo] = useState(false);
 
   useEffect(() => {
     if (navigator.permissions && navigator.permissions.query) {
@@ -65,18 +67,33 @@ export default function ImmersiveView({
       <div className="absolute inset-0 immersive-atmosphere pointer-events-none" />
 
       {/* Info Button */}
-      <div className="absolute top-6 left-6 z-10 flex flex-col items-start group">
+      <div 
+        className="absolute top-6 left-6 z-10 flex flex-col items-start"
+        onMouseEnter={() => setShowInfo(true)}
+        onMouseLeave={() => setShowInfo(false)}
+      >
         <button 
-          className="p-2 -ml-2 text-white/20 hover:text-white/60 transition-colors"
+          className={`p-2 -ml-2 transition-colors ${showInfo ? 'text-white/50' : 'text-white/20 hover:text-white/40'}`}
           aria-label={isRu ? "О приложении" : "About"}
+          onClick={() => setShowInfo(!showInfo)}
         >
           <Info className="w-[18px] h-[18px]" strokeWidth={1.5} />
         </button>
-        <div className="absolute top-full left-0 mt-1 w-64 p-3 bg-[#0a0503]/90 border border-orange-500/10 rounded-xl text-[11px] leading-relaxed opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none backdrop-blur-md">
-          {isRu 
-            ? "Генеративная звуковая среда. Захватывает аудио вокруг вашей геопозиции через Freesound и плавно синтезирует звук." 
-            : "Generative soundscape. Sources audio around your location via Freesound and continuously synthesizes it."}
-        </div>
+        <AnimatePresence>
+          {showInfo && (
+            <motion.div 
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 0.35, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="mt-2 w-56 text-[9px] tracking-[0.15em] font-sans leading-loose text-[#e0d8d0] pointer-events-none"
+            >
+              {isRu 
+                ? "Генеративная звуковая среда. Захватывает аудио вокруг вашей геопозиции через Freesound и плавно синтезирует звук." 
+                : "Generative soundscape. Sources audio around your location via Freesound and continuously synthesizes it."}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence mode="wait">
@@ -96,7 +113,7 @@ export default function ImmersiveView({
               animate={{ opacity: 0.45, y: 0 }}
               transition={{ delay: 0.6, duration: 1.2 }}
             >
-              {isRu ? 'Эта среда воспроизводит звук' : 'This experience uses sound'}
+              {isRu ? 'Эта среда воспроизводит звук' : 'This thing uses sound'}
               {geoState !== 'granted' && (
                 isRu ? ' и требует вашей геопозиции.' : ' and requires your location.'
               )}
@@ -108,7 +125,7 @@ export default function ImmersiveView({
             <motion.button
               onClick={handleBegin}
               disabled={loading}
-              className="text-[11px] uppercase tracking-[0.35em] border-b border-current pb-1 transition-opacity disabled:opacity-20 cursor-pointer"
+              className="text-[11px] border-b border-current pb-1 transition-opacity disabled:opacity-20 cursor-pointer"
               style={{ opacity: 0.35 }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.35 }}
@@ -128,7 +145,7 @@ export default function ImmersiveView({
             transition={{ duration: 2.5 }}
             className="flex flex-col items-center gap-10"
           >
-            <CircleVisualizer settings={settings} isPlaying={isPlaying} getSmoothedRms={getSmoothedRms} />
+            <CircleVisualizer settings={settings} isPlaying={isPlaying} getSmoothedRms={getSmoothedRms} soundStatus={soundStatus} />
 
             <div className="h-4 flex items-center justify-center">
               <motion.div
@@ -168,3 +185,4 @@ export default function ImmersiveView({
     </div>
   );
 }
+
