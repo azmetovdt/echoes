@@ -38,7 +38,7 @@ export default function App() {
   const [echoMultiplier, setEchoMultiplier] = useState(1.0);
   const [echoCount, setEchoCount] = useState(0);
 
-  const { isPlaying, togglePlay, playSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms, soundStatus } = useAudioEngine(settings);
+  const { isPlaying, togglePlay, playSound, prepareSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms, soundStatus } = useAudioEngine(settings);
 
   useMorphing(settings, batchUpdate, settings.morphingEnabled && isPlaying);
 
@@ -83,7 +83,15 @@ export default function App() {
   useEffect(() => {
     if (isPlaying && sounds.length > 0) {
       const sound = sounds[currentIndex];
-      playSound(sound.previews['preview-hq-mp3'], sound.name, echoMultiplier);
+      const isVeryShort = (sound.duration || 45) < 10;
+      playSound(sound.previews['preview-hq-mp3'], sound.name, echoMultiplier, isVeryShort);
+
+      // PRE-LOAD NEXT SOUND
+      const nextIdx = (currentIndex + 1) % sounds.length;
+      const nextSound = sounds[nextIdx];
+      if (nextSound) {
+        prepareSound(nextSound.previews['preview-hq-mp3'], nextSound.name);
+      }
 
       if (location && sound.geotag) {
         const [sLat, sLon] = sound.geotag.split(' ').map(Number);
@@ -192,6 +200,7 @@ export default function App() {
             location={location}
             onSwitchToControl={() => setMode('control')}
             getSmoothedRms={getSmoothedRms}
+            soundStatus={soundStatus}
           />
         </motion.div>
       ) : (

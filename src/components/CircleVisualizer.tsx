@@ -58,18 +58,22 @@ function computePath(cx: number, cy: number, t: number, s: AudioSettings, rms: n
 export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, soundStatus = 'idle' }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
+  const pointRef = useRef<SVGCircleElement>(null);
   const settingsRef = useRef(settings);
   const rmsRef = useRef(getSmoothedRms);
   const soundStatusRef = useRef(soundStatus);
   const frameRef = useRef<number>(0);
   const startRef = useRef<number>(0);
-  const burstStartRef = useRef<number>(0);
+  const pointPosRef = useRef({ theta: 0, rFactor: 0 });
 
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { rmsRef.current = getSmoothedRms; }, [getSmoothedRms]);
   useEffect(() => {
     if (soundStatus === 'playing' && soundStatusRef.current !== 'playing') {
-      burstStartRef.current = performance.now();
+      pointPosRef.current = {
+        theta: Math.random() * Math.PI * 2,
+        rFactor: 0.15 + Math.random() * 0.7
+      };
     }
     soundStatusRef.current = soundStatus;
   }, [soundStatus]);
@@ -113,15 +117,8 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
       let extraGlow = 0;
 
       if (status === 'loading') {
-        extraR = -10 + Math.sin(t * 8) * 4;
-      } else if (status === 'playing') {
-        const timeSinceBurst = now - burstStartRef.current;
-        if (timeSinceBurst < 2000) {
-          const p = timeSinceBurst / 2000;
-          const decay = Math.pow(1 - p, 4);
-          extraR = 30 * decay;
-          extraGlow = 15 * decay;
-        }
+        extraR = Math.sin(t * 3) * 3;
+        extraGlow = Math.sin(t * 3) * 2;
       }
 
       pathRef.current?.setAttribute('d', computePath(150, 150, t, s, rms, extraR, status));
@@ -135,16 +132,35 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
       if (pathRef.current) {
         pathRef.current.setAttribute('stroke', color);
         pathRef.current.setAttribute('stroke-opacity', strokeOpacity);
-        if (status === 'loading') {
-          pathRef.current.setAttribute('stroke-dasharray', '4 12');
-          pathRef.current.setAttribute('transform', `rotate(${(t * 45) % 360} 150 150)`);
-        } else {
-          pathRef.current.removeAttribute('stroke-dasharray');
-          pathRef.current.removeAttribute('transform');
-        }
+        pathRef.current.removeAttribute('stroke-dasharray');
+        pathRef.current.removeAttribute('transform');
       }
       if (svgRef.current) {
         svgRef.current.style.filter = `drop-shadow(0 0 ${glowPx}px ${color})`;
+      }
+
+      if (pointRef.current) {
+        if (status === 'playing') {
+          const A1 = ((s.delayFeedback - 0.25) / 0.63) * 0.055 * BASE_R;
+          const A2 = (s.lfoDepth / 2000) * 0.03 * BASE_R;
+          const rotSpeed = s.lfoFreq * 0.9;
+          const r0 = BASE_R * (1 + rms * 0.5) + extraR;
+          
+          const { theta, rFactor } = pointPosRef.current;
+          const r_bound = r0 + A1 * Math.sin(2 * theta + t * rotSpeed) + A2 * Math.sin(3 * theta - t * 0.52);
+          const r_point = r_bound * rFactor;
+          
+          pointRef.current.setAttribute('cx', (150 + r_point * Math.cos(theta)).toFixed(1));
+          pointRef.current.setAttribute('cy', (150 + r_point * Math.sin(theta)).toFixed(1));
+          
+          const pointRadius = (2 + rms * 4).toFixed(1);
+          pointRef.current.setAttribute('r', pointRadius);
+          pointRef.current.setAttribute('fill', color);
+          pointRef.current.style.opacity = (0.4 + rms * 0.6).toFixed(2);
+          pointRef.current.style.display = 'block';
+        } else {
+          pointRef.current.style.display = 'none';
+        }
       }
 
       frameRef.current = requestAnimationFrame(animate);
@@ -171,6 +187,7 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
         strokeWidth="0.75"
         strokeOpacity="0.3"
       />
+      {/* <circle ref={pointRef} cx="150" cy="150" r="0" style={{ display: 'none', transition: 'opacity 0.2s' }} /> */}
     </svg>
   );
 }
