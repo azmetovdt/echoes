@@ -1,4 +1,4 @@
-# AI Guidelines for `echoes`
+# AI Guidelines for `echolocus`
 
 ## Tech Stack
 - **Framework:** React 19 with Vite

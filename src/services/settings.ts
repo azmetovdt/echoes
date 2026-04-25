@@ -154,8 +154,8 @@ export const BUILTIN_PRESETS: Record<string, AudioSettings> = {
   },
 };
 
-const STORAGE_KEY = 'echoes-settings-v1';
-const PRESETS_KEY = 'echoes-user-presets-v1';
+const STORAGE_KEY = 'echolocus-settings-v1';
+const PRESETS_KEY = 'echolocus-user-presets-v1';
 
 function loadSettings(): AudioSettings {
   try {

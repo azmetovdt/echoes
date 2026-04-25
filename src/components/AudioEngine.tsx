@@ -411,7 +411,7 @@ export function useAudioEngine(settings: AudioSettings) {
 
       const a = document.createElement('a');
       a.href = url;
-      a.download = `echoes-${Date.now()}.${ext}`;
+      a.download = `echolocus-${Date.now()}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     };

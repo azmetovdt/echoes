@@ -34,6 +34,11 @@ export default function App() {
 
   const { settings, updateSetting, batchUpdate, userPresets, savePreset, loadPreset, deletePreset } = useSettings();
 
+  useEffect(() => {
+    const isRu = routeLocation.pathname.startsWith('/ru');
+    document.title = isRu ? 'Эхолокус' : 'Echolocus';
+  }, [routeLocation.pathname]);
+
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [sounds, setSounds] = useState<FreesoundResult[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
