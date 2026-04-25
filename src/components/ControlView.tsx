@@ -68,6 +68,7 @@ export default function ControlView({
 
       <button
         onClick={onBack}
+        data-umami-event="back-to-immersive"
         className="fixed top-8 left-8 z-50 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] opacity-30 hover:opacity-100 transition-opacity cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -126,6 +127,7 @@ export default function ControlView({
               <button
                 onClick={togglePlay}
                 disabled={loading || sounds.length === 0}
+                data-umami-event={isPlaying ? "pause-audio" : "play-audio"}
                 className="w-20 h-20 rounded-full border border-white/20 flex items-center justify-center hover:bg-white/5 transition-all disabled:opacity-20"
               >
                 {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8 translate-x-1" />}
@@ -135,6 +137,7 @@ export default function ControlView({
             <div className="flex items-center justify-center gap-6">
               <button
                 onClick={() => setShowQueue(!showQueue)}
+                data-umami-event="toggle-queue"
                 className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
               >
                 <ListMusic className="w-3 h-3" />
@@ -143,6 +146,7 @@ export default function ControlView({
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={!isPlaying}
+                data-umami-event={isRecording ? "stop-recording" : "start-recording"}
                 className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest transition-opacity disabled:opacity-20 ${isRecording ? 'opacity-100 text-red-400' : 'opacity-40 hover:opacity-100'}`}
               >
                 {isRecording ? <Square className="w-3 h-3 fill-current" /> : <Circle className="w-3 h-3 fill-current" />}
@@ -150,6 +154,7 @@ export default function ControlView({
               </button>
               <button
                 onClick={() => setShowSettings(true)}
+                data-umami-event="open-settings"
                 className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
               >
                 <Settings className="w-3 h-3" />

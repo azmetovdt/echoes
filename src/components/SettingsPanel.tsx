@@ -134,6 +134,8 @@ export default function SettingsPanel({
               <button
                 key={name}
                 onClick={() => onLoadPreset(preset)}
+                data-umami-event="load-preset"
+                data-umami-event-preset={name}
                 className="text-[9px] uppercase tracking-widest px-2.5 py-1 rounded-full border border-white/10 hover:border-orange-500/50 hover:bg-orange-500/10 transition-all"
               >
                 {name}
@@ -145,8 +147,20 @@ export default function SettingsPanel({
             <div className="flex flex-wrap gap-1.5 mb-3">
               {Object.entries(userPresets).map(([name, preset]) => (
                 <div key={name} className="flex items-center gap-1 text-[9px] uppercase tracking-widest px-2.5 py-1 rounded-full border border-orange-500/30 bg-orange-500/5">
-                  <button onClick={() => onLoadPreset(preset)} className="hover:text-orange-300 transition-colors">{name}</button>
-                  <button onClick={() => onDeletePreset(name)} className="opacity-30 hover:opacity-100 transition-opacity ml-0.5">
+                  <button 
+                    onClick={() => onLoadPreset(preset)} 
+                    data-umami-event="load-user-preset"
+                    data-umami-event-preset={name}
+                    className="hover:text-orange-300 transition-colors"
+                  >
+                    {name}
+                  </button>
+                  <button 
+                    onClick={() => onDeletePreset(name)} 
+                    data-umami-event="delete-user-preset"
+                    data-umami-event-preset={name}
+                    className="opacity-30 hover:opacity-100 transition-opacity ml-0.5"
+                  >
                     <X className="w-2.5 h-2.5" />
                   </button>
                 </div>
@@ -166,6 +180,7 @@ export default function SettingsPanel({
             <button
               onClick={handleSavePreset}
               disabled={!newPresetName.trim()}
+              data-umami-event="save-preset"
               className="text-[9px] uppercase tracking-widest px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 rounded-lg transition-colors disabled:opacity-25"
             >
               Save
@@ -200,12 +215,14 @@ export default function SettingsPanel({
             <div className="flex gap-2">
               <button
                 onClick={onSetManualLocation}
+                data-umami-event="set-manual-location"
                 className="flex-1 text-[9px] uppercase tracking-widest py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors flex items-center justify-center gap-1.5"
               >
                 <MapPin className="w-3 h-3" /> Set
               </button>
               <button
                 onClick={onGetGPS}
+                data-umami-event="get-gps-location"
                 className="flex-1 text-[9px] uppercase tracking-widest py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors flex items-center justify-center gap-1.5"
               >
                 <RefreshCw className={`w-3 h-3 ${gpsLoading ? 'animate-spin' : ''}`} /> GPS

@@ -58,6 +58,7 @@ export default function ImmersiveView({
     navigator.clipboard.writeText(window.location.href).then(() => {
       setShowCopied(true);
       setTimeout(() => setShowCopied(false), 2000);
+      window.umami?.track('share-location', { url: window.location.href });
     });
   }, []);
 
@@ -71,6 +72,7 @@ export default function ImmersiveView({
     tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 3000);
     if (tapCountRef.current >= 5) {
       tapCountRef.current = 0;
+      window.umami?.track('secret-control-access');
       onSwitchToControl();
     }
   }, [onSwitchToControl]);
@@ -146,6 +148,7 @@ export default function ImmersiveView({
                   <span>{location.lat.toFixed(4)}, {location.lon.toFixed(4)}</span>
                   <button
                     onClick={onResetLocation}
+                    data-umami-event="reset-location"
                     className="cursor-pointer hover:text-white transition-colors"
                     aria-label={isRu ? "Сбросить местоположение" : "Reset location"}
                   >
@@ -157,6 +160,7 @@ export default function ImmersiveView({
               <motion.button
                 onClick={() => handleBegin()}
                 disabled={loading}
+                data-umami-event="begin-experience-button"
                 className="text-[11px] border-b border-current pb-1 transition-opacity disabled:opacity-20 cursor-pointer text-white/80 hover:text-white/100 transition-colors"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 0.35 }}
@@ -185,6 +189,8 @@ export default function ImmersiveView({
                   <button
                     key={preset.name}
                     onClick={() => handleBegin({ lat: preset.lat, lon: preset.lon })}
+                    data-umami-event="load-preset-immersive"
+                    data-umami-event-preset={preset.name}
                     className="hover:opacity-500 transition-opacity cursor-pointer text-white/80 hover:text-white/100"
                   >
                     {preset.name}
@@ -231,6 +237,7 @@ export default function ImmersiveView({
                   className={`cursor-pointer flex items-center gap-2 p-2 transition-colors ${isRecording ? 'text-red-500/60 hover:text-red-500/80' : 'text-white/20 hover:text-white/40'}`}
                   aria-label={isRecording ? (isRu ? "Остановить запись" : "Stop recording") : (isRu ? "Записать" : "Record")}
                   onClick={isRecording ? stopRecording : startRecording}
+                  data-umami-event={isRecording ? "stop-recording-immersive" : "start-recording-immersive"}
                 >
                   {isRecording ? (
                     <>

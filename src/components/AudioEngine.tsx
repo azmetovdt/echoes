@@ -351,6 +351,11 @@ export function useAudioEngine(settings: AudioSettings) {
     activeSlotRef.current = nextSlotKey;
     setCurrentSoundName(name);
     setSoundStatus('playing');
+    
+    // Track sound played in Umami
+    if (window.umami) {
+      window.umami.track('sound-played', { name, url });
+    }
   }, [initAudio, createSlot, currentSoundName]);
 
   const togglePlay = useCallback(async () => {

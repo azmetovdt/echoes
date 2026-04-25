@@ -77,10 +77,13 @@ export default function App() {
       (pos) => {
         setLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
         setLoading(false);
+        window.umami?.track('location-update-gps', { lat: pos.coords.latitude, lon: pos.coords.longitude });
       },
-      () => {
-        setError('Could not get location. Please enable GPS.');
+      (err) => {
+        const msg = 'Could not get location. Please enable GPS.';
+        setError(msg);
         setLoading(false);
+        window.umami?.track('error', { type: 'geolocation', message: err.message });
       }
     );
   }, []);
@@ -116,9 +119,12 @@ export default function App() {
         setSounds(results);
         setCurrentIndex(0);
         if (results.length === 0) {
-          setError('No sounds found in this area. Try a different location?');
+          const msg = 'No sounds found in this area. Try a different location?';
+          setError(msg);
+          window.umami?.track('error', { type: 'no-sounds', lat: location.lat, lon: location.lon, radius: searchRadius });
         } else {
           setError(null);
+          window.umami?.track('sounds-fetched', { count: results.length, lat: location.lat, lon: location.lon, radius: searchRadius });
         }
       });
     }
@@ -171,9 +177,11 @@ export default function App() {
         if (isShort && echoCount === 0 && Math.random() < ECHO_CHANCE) {
           setEchoMultiplier(ECHO_DECAY);
           setEchoCount(1);
+          window.umami?.track('echo-triggered', { count: 1 });
         } else if (echoCount > 0 && echoCount < MAX_ECHOES && echoMultiplier * ECHO_DECAY > 0.04) {
           setEchoMultiplier(echoMultiplier * ECHO_DECAY);
           setEchoCount(echoCount + 1);
+          window.umami?.track('echo-triggered', { count: echoCount + 1 });
         } else {
           setEchoMultiplier(1.0);
           setEchoCount(0);
@@ -194,12 +202,16 @@ export default function App() {
     if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
       setLocation({ lat, lon });
       setError(null);
+      window.umami?.track('location-update-manual', { lat, lon });
     } else {
-      setError('Invalid coordinates. Lat must be -90 to 90, Lon must be -180 to 180.');
+      const msg = 'Invalid coordinates. Lat must be -90 to 90, Lon must be -180 to 180.';
+      setError(msg);
+      window.umami?.track('error', { type: 'invalid-coords', lat: manualLat, lon: manualLon });
     }
   }, [manualLat, manualLon]);
 
   const handleBegin = useCallback((preset?: { lat: number; lon: number }) => {
+    window.umami?.track('begin-experience', { preset: !!preset });
     if (preset) {
       setLocation(preset);
     } else if (!location) {
