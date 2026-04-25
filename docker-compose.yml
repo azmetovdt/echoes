@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/${{ github.repository_owner }}/echoes:latest
+    image: ${APP_IMAGE}
     restart: always
     ports:
       - "8080:80"
