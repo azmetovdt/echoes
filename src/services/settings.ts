@@ -27,6 +27,7 @@ export interface AudioSettings {
   delayTime: number;           // 0–2 seconds
   delayFeedback: number;       // 0–0.9
   // Radio bandpass filter + LFO
+  radioFilterEnabled: boolean;
   radioFilterFreq: number;     // Hz
   radioFilterQ: number;
   lfoFreq: number;             // Hz, LFO rate
@@ -45,7 +46,7 @@ export interface AudioSettings {
 
 export const DEFAULT_SETTINGS: AudioSettings = {
   crossfadeDuration: 3,
-  soundVolume: 0.45,
+  soundVolume: 1,
   searchRadius: 10,
   includeExplicit: false,
   cc0Only: false,
@@ -60,6 +61,7 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   reverbDecay: 2,
   delayTime: 0.24,
   delayFeedback: 0.82,
+  radioFilterEnabled: true,
   radioFilterFreq: 2000,
   radioFilterQ: 4,
   lfoFreq: 0.3,
@@ -67,7 +69,7 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   dryGain: 1,
   noiseLfo2Freq: 3.3,
   noiseLfo2Depth: 0,
-  reactiveGainSensitivity: 20,
+  reactiveGainSensitivity: 2.5,
   noiseFilterSensitivity: 8000,
   tremoloSensitivity: 150,
   morphingEnabled: true,

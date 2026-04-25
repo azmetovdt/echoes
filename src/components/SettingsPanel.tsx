@@ -265,6 +265,8 @@ export default function SettingsPanel({
 
           {/* ── Radio Filter ── */}
           <SectionDivider label="Radio Filter" />
+          <Toggle label="Enabled" value={settings.radioFilterEnabled}
+            onChange={v => updateSetting('radioFilterEnabled', v)} />
           <Slider label="Frequency" value={settings.radioFilterFreq} min={200} max={4000} step={10} unit=" Hz"
             onChange={v => updateSetting('radioFilterFreq', v)} />
           <Slider label="Resonance" value={settings.radioFilterQ} min={0.1} max={10} step={0.1}

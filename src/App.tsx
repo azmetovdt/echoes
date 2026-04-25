@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Routes, Route, useNavigate, useLocation as useRouteLocation } from 'react-router-dom';
 import { fetchLocalSounds, FreesoundResult } from './services/freesound';
 import { useAudioEngine } from './components/AudioEngine';
 import { useSettings } from './services/settings';
@@ -24,9 +25,15 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 export default function App() {
+  const navigate = useNavigate();
+  const routeLocation = useRouteLocation();
+  
+  // Extract lang from path for persistent navigation
+  const langMatch = routeLocation.pathname.match(/^\/(ru|en)/);
+  const langPrefix = langMatch ? langMatch[0] : '';
+
   const { settings, updateSetting, batchUpdate, userPresets, savePreset, loadPreset, deletePreset } = useSettings();
 
-  const [mode, setMode] = useState<'immersive' | 'control'>('immersive');
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [sounds, setSounds] = useState<FreesoundResult[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -37,6 +44,22 @@ export default function App() {
   const [manualLon, setManualLon] = useState('');
   const [echoMultiplier, setEchoMultiplier] = useState(1.0);
   const [echoCount, setEchoCount] = useState(0);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const lat = parseFloat(params.get('lat') || '');
+    const lon = parseFloat(params.get('lon') || '');
+    const r = parseInt(params.get('r') || '', 10);
+
+    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      setLocation({ lat, lon });
+    }
+    
+    if (!isNaN(r) && r > 0) {
+      batchUpdate({ searchRadius: r });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { isPlaying, togglePlay, playSound, prepareSound, currentSoundName, isRecording, startRecording, stopRecording, dimCurrentSound, getSmoothedRms, soundStatus } = useAudioEngine(settings);
 
@@ -61,10 +84,27 @@ export default function App() {
     if (location) {
       setManualLat(location.lat.toFixed(6));
       setManualLon(location.lon.toFixed(6));
+    } else {
+      setManualLat('');
+      setManualLon('');
     }
   }, [location]);
 
   const { searchRadius, includeExplicit, cc0Only } = settings;
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (location) {
+      url.searchParams.set('lat', location.lat.toFixed(6));
+      url.searchParams.set('lon', location.lon.toFixed(6));
+    } else {
+      url.searchParams.delete('lat');
+      url.searchParams.delete('lon');
+    }
+    url.searchParams.set('r', searchRadius.toString());
+    window.history.replaceState(null, '', url.toString());
+  }, [location, searchRadius, routeLocation.pathname]);
+
   useEffect(() => {
     if (location) {
       fetchLocalSounds(location.lat, location.lon, searchRadius, includeExplicit, cc0Only).then((results) => {
@@ -154,10 +194,14 @@ export default function App() {
     }
   }, [manualLat, manualLon]);
 
-  const handleBegin = useCallback(() => {
-    getGeoLocation();
+  const handleBegin = useCallback((preset?: { lat: number; lon: number }) => {
+    if (preset) {
+      setLocation(preset);
+    } else if (!location) {
+      getGeoLocation();
+    }
     togglePlay();
-  }, [getGeoLocation, togglePlay]);
+  }, [getGeoLocation, togglePlay, location]);
 
   const hasToken = !!import.meta.env.VITE_FREESOUND_TOKEN;
 
@@ -188,52 +232,64 @@ export default function App() {
 
   return (
     <AnimatePresence mode="wait">
-      {mode === 'immersive' ? (
-        <motion.div key="immersive" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <ImmersiveView
-            settings={settings}
-            batchUpdate={batchUpdate}
-            isPlaying={isPlaying}
-            onBegin={handleBegin}
-            loading={loading}
-            error={error}
-            location={location}
-            onSwitchToControl={() => setMode('control')}
-            getSmoothedRms={getSmoothedRms}
-            soundStatus={soundStatus}
-          />
-        </motion.div>
-      ) : (
-        <motion.div key="control" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <ControlView
-            settings={settings}
-            updateSetting={updateSetting}
-            userPresets={userPresets}
-            onSavePreset={(name) => savePreset(name, settings)}
-            onLoadPreset={loadPreset}
-            onDeletePreset={deletePreset}
-            location={location}
-            sounds={sounds}
-            currentIndex={currentIndex}
-            setCurrentIndex={setCurrentIndex}
-            isPlaying={isPlaying}
-            togglePlay={togglePlay}
-            currentSoundName={currentSoundName}
-            currentDistance={currentDistance}
-            isRecording={isRecording}
-            startRecording={startRecording}
-            stopRecording={stopRecording}
-            loading={loading}
-            error={error}
-            manualLat={manualLat}
-            manualLon={manualLon}
-            setManualLat={setManualLat}
-            setManualLon={setManualLon}
-            onSetManualLocation={applyManualLocation}
-            onGetGPS={getGeoLocation}
-          />
-        </motion.div>
-      )}
+      <Routes location={routeLocation} key={routeLocation.pathname}>
+        {['/', '/:lang/'].map((path) => (
+          <Route key={path} path={path} element={
+            <motion.div key="immersive" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <ImmersiveView
+                settings={settings}
+                batchUpdate={batchUpdate}
+                isPlaying={isPlaying}
+                onBegin={handleBegin}
+                onResetLocation={() => setLocation(null)}
+                loading={loading}
+                error={error}
+                location={location}
+                onSwitchToControl={() => navigate(`${langPrefix}/control`)}
+                getSmoothedRms={getSmoothedRms}
+                soundStatus={soundStatus}
+                isRecording={isRecording}
+                startRecording={() => startRecording('mp3')}
+                stopRecording={stopRecording}
+              />
+            </motion.div>
+          } />
+        ))}
+        {['/control', '/:lang/control'].map((path) => (
+          <Route key={path} path={path} element={
+            <motion.div key="control" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <ControlView
+                settings={settings}
+                updateSetting={updateSetting}
+                userPresets={userPresets}
+                onSavePreset={(name) => savePreset(name, settings)}
+                onLoadPreset={loadPreset}
+                onDeletePreset={deletePreset}
+                location={location}
+                sounds={sounds}
+                currentIndex={currentIndex}
+                setCurrentIndex={setCurrentIndex}
+                isPlaying={isPlaying}
+                togglePlay={togglePlay}
+                currentSoundName={currentSoundName}
+                currentDistance={currentDistance}
+                isRecording={isRecording}
+                startRecording={() => startRecording('webm')}
+                stopRecording={stopRecording}
+                loading={loading}
+                error={error}
+                manualLat={manualLat}
+                manualLon={manualLon}
+                setManualLat={setManualLat}
+                setManualLon={setManualLon}
+                onSetManualLocation={applyManualLocation}
+                onGetGPS={getGeoLocation}
+                onBack={() => navigate(langPrefix || '/')}
+              />
+            </motion.div>
+          } />
+        ))}
+      </Routes>
     </AnimatePresence>
   );
 }

@@ -72,8 +72,15 @@ export function useAudioEngine(settings: AudioSettings) {
     setParam(delayFeedbackRef.current?.gain, settings.delayFeedback, 0.1);
     
     if (radioFilterRef.current) {
-      setParam(radioFilterRef.current.frequency, settings.radioFilterFreq, 0.05);
-      setParam(radioFilterRef.current.Q, settings.radioFilterQ, 0.05);
+      if (settings.radioFilterEnabled) {
+        radioFilterRef.current.type = 'bandpass';
+        setParam(radioFilterRef.current.frequency, settings.radioFilterFreq, 0.05);
+        setParam(radioFilterRef.current.Q, settings.radioFilterQ, 0.05);
+      } else {
+        radioFilterRef.current.type = 'allpass';
+        setParam(radioFilterRef.current.frequency, 20000, 0.05);
+        setParam(radioFilterRef.current.Q, 0.001, 0.05);
+      }
     }
     
     setParam(lfoRef.current?.frequency, settings.lfoFreq, 0.1);
@@ -368,7 +375,7 @@ export function useAudioEngine(settings: AudioSettings) {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
-  const startRecording = useCallback(() => {
+  const startRecording = useCallback((preferredFormat: 'webm' | 'mp3' = 'webm') => {
     const ctx = audioCtx.current;
     const masterOut = masterOutRef.current;
     if (!ctx || !masterOut) return;
@@ -377,7 +384,15 @@ export function useAudioEngine(settings: AudioSettings) {
     const dest = ctx.createMediaStreamDestination();
     masterOut.connect(dest);
 
-    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+    let candidates: string[] = [];
+    if (preferredFormat === 'mp3') {
+      // Browsers generally don't support audio/mpeg in MediaRecorder, 
+      // but we try it and fall back to common formats if unavailable.
+      candidates = ['audio/mpeg', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
+    } else {
+      candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+    }
+    
     const mimeType = candidates.find(t => MediaRecorder.isTypeSupported(t)) ?? '';
     
     const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
@@ -388,7 +403,12 @@ export function useAudioEngine(settings: AudioSettings) {
       masterOut.disconnect(dest);
       const blob = new Blob(chunks, { type: recorder.mimeType });
       const url = URL.createObjectURL(blob);
-      const ext = recorder.mimeType.includes('ogg') ? 'ogg' : 'webm';
+      
+      let ext = 'webm';
+      if (recorder.mimeType.includes('mpeg')) ext = 'mp3';
+      else if (recorder.mimeType.includes('mp4')) ext = 'm4a';
+      else if (recorder.mimeType.includes('ogg')) ext = 'ogg';
+
       const a = document.createElement('a');
       a.href = url;
       a.download = `echoes-${Date.now()}.${ext}`;

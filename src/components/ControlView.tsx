@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { MapPin, Play, Pause, Settings, ListMusic, Circle, Square } from 'lucide-react';
+import { MapPin, Play, Pause, Settings, ListMusic, Circle, Square, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { FreesoundResult } from '../services/freesound';
 import { AudioSettings } from '../services/settings';
@@ -48,6 +48,7 @@ interface Props {
   setManualLon: (v: string) => void;
   onSetManualLocation: () => void;
   onGetGPS: () => void;
+  onBack: () => void;
 }
 
 export default function ControlView({
@@ -56,7 +57,7 @@ export default function ControlView({
   isPlaying, togglePlay, currentSoundName, currentDistance,
   isRecording, startRecording, stopRecording,
   loading, error, manualLat, manualLon, setManualLat, setManualLon,
-  onSetManualLocation, onGetGPS,
+  onSetManualLocation, onGetGPS, onBack
 }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -64,6 +65,14 @@ export default function ControlView({
   return (
     <div className="min-h-screen bg-[#0a0502] text-[#e0d8d0] font-serif relative overflow-y-auto overflow-x-hidden">
       <div className="absolute inset-0 atmosphere pointer-events-none" />
+
+      <button
+        onClick={onBack}
+        className="fixed top-8 left-8 z-50 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] opacity-30 hover:opacity-100 transition-opacity cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back
+      </button>
 
       <main className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6 text-center py-12">
         <motion.div

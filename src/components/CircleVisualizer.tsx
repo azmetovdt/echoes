@@ -13,11 +13,11 @@ interface Props {
   soundStatus?: 'idle' | 'loading' | 'playing';
 }
 
-const N = 8;
+const N = 12; // Increased for more noise detail
 const BASE_R = 90;
 
 function computePath(cx: number, cy: number, t: number, s: AudioSettings, rms: number, extraR: number = 0, status: 'idle' | 'loading' | 'playing' = 'idle'): string {
-  // Very subtle parametric deformations — stays nearly circular
+  // Very subtle parametric deformations
   let A1 = ((s.delayFeedback - 0.25) / 0.63) * 0.055 * BASE_R;
   let A2 = (s.lfoDepth / 2000) * 0.03 * BASE_R;
   const rotSpeed = s.lfoFreq * 0.9;
@@ -30,11 +30,18 @@ function computePath(cx: number, cy: number, t: number, s: AudioSettings, rms: n
   // Volume peak breathes the whole circle outward
   const r0 = BASE_R * (1 + rms * 0.5) + extraR;
 
+  // Added high-frequency noise jitter to the radius
   const pts: [number, number][] = Array.from({ length: N }, (_, i) => {
     const angle = (i / N) * Math.PI * 2;
-    const r = r0
+    // Base parametric shape
+    let r = r0
       + A1 * Math.sin(2 * angle + t * rotSpeed)
       + A2 * Math.sin(3 * angle - t * 0.52);
+    
+    // Add "grainy" jitter that reacts to RMS
+    const jitter = (Math.random() - 0.5) * (1 + rms * 15);
+    r += jitter;
+
     return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
   });
 
@@ -59,6 +66,8 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
   const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
   const pointRef = useRef<SVGCircleElement>(null);
+  const turbulenceRef = useRef<SVGFETurbulenceElement>(null);
+  
   const settingsRef = useRef(settings);
   const rmsRef = useRef(getSmoothedRms);
   const soundStatusRef = useRef(soundStatus);
@@ -80,7 +89,6 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
 
   useEffect(() => {
     if (!isPlaying) {
-      // Reset to static circle when paused
       if (pathRef.current) {
         const pts: [number, number][] = Array.from({ length: N }, (_, i) => {
           const angle = (i / N) * Math.PI * 2;
@@ -121,9 +129,10 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
         extraGlow = Math.sin(t * 3) * 2;
       }
 
+      // Update path with jitter
       pathRef.current?.setAttribute('d', computePath(150, 150, t, s, rms, extraR, status));
 
-      // Color and glow driven by params — all in rAF, zero React re-renders
+      // Color and glow
       const hue = ((s.radioFilterFreq - 300) / 3200) * 180 + 15;
       const strokeOpacity = (0.35 + rms * 0.55).toFixed(2);
       const color = `hsl(${hue.toFixed(0)},40%,72%)`;
@@ -132,36 +141,40 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
       if (pathRef.current) {
         pathRef.current.setAttribute('stroke', color);
         pathRef.current.setAttribute('stroke-opacity', strokeOpacity);
-        pathRef.current.removeAttribute('stroke-dasharray');
-        pathRef.current.removeAttribute('transform');
       }
+      
+      // Animate grain seed for a shimmering texture
+      if (turbulenceRef.current) {
+        turbulenceRef.current.setAttribute('seed', Math.floor(Math.random() * 1000).toString());
+      }
+
       if (svgRef.current) {
         svgRef.current.style.filter = `drop-shadow(0 0 ${glowPx}px ${color})`;
       }
 
-      if (pointRef.current) {
-        if (status === 'playing') {
-          const A1 = ((s.delayFeedback - 0.25) / 0.63) * 0.055 * BASE_R;
-          const A2 = (s.lfoDepth / 2000) * 0.03 * BASE_R;
-          const rotSpeed = s.lfoFreq * 0.9;
-          const r0 = BASE_R * (1 + rms * 0.5) + extraR;
+      // if (pointRef.current) {
+      //   if (status === 'playing') {
+      //     const A1 = ((s.delayFeedback - 0.25) / 0.63) * 0.055 * BASE_R;
+      //     const A2 = (s.lfoDepth / 2000) * 0.03 * BASE_R;
+      //     const rotSpeed = s.lfoFreq * 0.9;
+      //     const r0 = BASE_R * (1 + rms * 0.5) + extraR;
           
-          const { theta, rFactor } = pointPosRef.current;
-          const r_bound = r0 + A1 * Math.sin(2 * theta + t * rotSpeed) + A2 * Math.sin(3 * theta - t * 0.52);
-          const r_point = r_bound * rFactor;
+      //     const { theta, rFactor } = pointPosRef.current;
+      //     const r_bound = r0 + A1 * Math.sin(2 * theta + t * rotSpeed) + A2 * Math.sin(3 * theta - t * 0.52);
+      //     const r_point = r_bound * rFactor;
           
-          pointRef.current.setAttribute('cx', (150 + r_point * Math.cos(theta)).toFixed(1));
-          pointRef.current.setAttribute('cy', (150 + r_point * Math.sin(theta)).toFixed(1));
+      //     pointRef.current.setAttribute('cx', (150 + r_point * Math.cos(theta)).toFixed(1));
+      //     pointRef.current.setAttribute('cy', (150 + r_point * Math.sin(theta)).toFixed(1));
           
-          const pointRadius = (2 + rms * 4).toFixed(1);
-          pointRef.current.setAttribute('r', pointRadius);
-          pointRef.current.setAttribute('fill', color);
-          pointRef.current.style.opacity = (0.4 + rms * 0.6).toFixed(2);
-          pointRef.current.style.display = 'block';
-        } else {
-          pointRef.current.style.display = 'none';
-        }
-      }
+      //     const pointRadius = (2 + rms * 4).toFixed(1);
+      //     pointRef.current.setAttribute('r', pointRadius);
+      //     pointRef.current.setAttribute('fill', color);
+      //     pointRef.current.style.opacity = (0.4 + rms * 0.6).toFixed(2);
+      //     pointRef.current.style.display = 'block';
+      //   } else {
+      //     pointRef.current.style.display = 'none';
+      //   }
+      // }
 
       frameRef.current = requestAnimationFrame(animate);
     };
@@ -177,17 +190,32 @@ export default function CircleVisualizer({ settings, isPlaying, getSmoothedRms, 
     <svg
       ref={svgRef}
       viewBox="0 0 300 300"
-      className="w-56 h-56 md:w-72 md:h-72"
+      className="w-56 h-56 md:w-72 md:h-72 overflow-visible"
       style={{ opacity: isPlaying ? 1 : 0.2, transition: 'opacity 3s' }}
     >
-      <path
-        ref={pathRef}
-        fill="none"
-        stroke="hsl(20,40%,65%)"
-        strokeWidth="0.75"
-        strokeOpacity="0.3"
-      />
-      {/* <circle ref={pointRef} cx="150" cy="150" r="0" style={{ display: 'none', transition: 'opacity 0.2s' }} /> */}
+      <defs>
+        <filter id="grainy" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence 
+            ref={turbulenceRef}
+            type="fractalNoise" 
+            baseFrequency="0.85" 
+            numOctaves="3" 
+            stitchTiles="stitch" 
+          />
+          <feDisplacementMap in="SourceGraphic" scale="3" />
+        </filter>
+      </defs>
+
+      <g filter="url(#grainy)">
+        <path
+          ref={pathRef}
+          fill="none"
+          stroke="hsl(20,40%,65%)"
+          strokeWidth="1.2"
+          strokeOpacity="0.3"
+        />
+        <circle ref={pointRef} cx="150" cy="150" r="0" style={{ display: 'none' }} />
+      </g>
     </svg>
   );
 }

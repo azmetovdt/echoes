@@ -37,7 +37,7 @@ export default function NoiseCoordinates() {
   }, []);
 
   const isRu = window.location.pathname.includes('/ru');
-  const tooltip = isRu ? 'Локация не определена' : 'Location not determined';
+  const tooltip = isRu ? 'Местоположение не определено' : 'Location not determined';
 
   return (
     <span className="relative group cursor-help font-mono inline-block" title={tooltip}>
