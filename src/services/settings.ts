@@ -61,7 +61,7 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   reverbDecay: 2,
   delayTime: 0.24,
   delayFeedback: 0.82,
-  radioFilterEnabled: true,
+  radioFilterEnabled: false,
   radioFilterFreq: 2000,
   radioFilterQ: 4,
   lfoFreq: 0.3,
