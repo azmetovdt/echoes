@@ -160,9 +160,12 @@ const PRESETS_KEY = 'echolocus-user-presets-v1';
 function loadSettings(): AudioSettings {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_SETTINGS, ...parsed, radioFilterEnabled: false };
+    }
   } catch {}
-  return { ...DEFAULT_SETTINGS };
+  return { ...DEFAULT_SETTINGS, radioFilterEnabled: false };
 }
 
 function loadUserPresets(): Record<string, AudioSettings> {
@@ -202,8 +205,9 @@ export function useSettings() {
   }, []);
 
   const loadPreset = useCallback((preset: AudioSettings) => {
-    setSettings(preset);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(preset));
+    const nextPreset = { ...preset, radioFilterEnabled: false };
+    setSettings(nextPreset);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextPreset));
   }, []);
 
   const deletePreset = useCallback((name: string) => {
